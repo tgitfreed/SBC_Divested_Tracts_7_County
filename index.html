@@ -7,35 +7,39 @@
 
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <!-- Leaflet Control Geocoder CSS -->
+  <!-- Geocoder CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
 
   <style>
-    body, html {
+    /* Fullscreen layout */
+    html, body {
       margin: 0;
       padding: 0;
       height: 100%;
     }
+
+    /* Fullscreen map */
     #map {
       height: 100vh;
       width: 100%;
     }
 
+    /* Legend box (bottom-left) */
     .legend {
-      background: white;
-      padding: 14px;
-      line-height: 24px;
-      color: #333;
       position: absolute;
-      bottom: 30px;
+      bottom: 120px;
       left: 10px;
       z-index: 1000;
+      background: white;
+      padding: 14px;
       font-size: 16px;
       font-weight: 500;
       border-radius: 6px;
       box-shadow: 0 0 15px rgba(0,0,0,0.2);
-      width: 160px;
+      width: 180px;
     }
+
+    /* Legend color squares */
     .legend i {
       width: 20px;
       height: 20px;
@@ -44,10 +48,39 @@
       opacity: 0.9;
       border-radius: 3px;
     }
+
     .legend span {
       display: inline-block;
       vertical-align: top;
       margin-top: 2px;
+    }
+
+    /* Custom inline basemap selector */
+    .basemap-control {
+      position: absolute;
+      bottom: 37px;
+      left: 20px; /* next to the legend */
+      z-index: 1000;
+      background: white;
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    }
+
+    .basemap-control label {
+      margin-right: 10px;
+      display: inline-block;
+    }
+
+    .topright-control {
+      position: absolute;
+      top: 50px;
+      right: 10px;
+      z-index: 1000;
+      background: white;
+      padding: 6px;
+      border-radius: 4px;
     }
   </style>
 </head>
@@ -55,92 +88,109 @@
 
 <div id="map"></div>
 
-<!-- Leaflet JS -->
+<!-- Leaflet + Geocoder scripts -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<!-- Leaflet Control Geocoder JS -->
 <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
 
 <script>
-  // Initialize Leaflet map
+  // Initialize the map
   const map = L.map('map').setView([37.3, -118.3], 8);
 
-  // ESRI topo basemap
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, USGS, NOAA',
+  // Basemap options
+  const esriTopo = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles &copy; Esri — Esri, USGS, NOAA',
     maxZoom: 19
-  }).addTo(map);
+  }).addTo(map); // Default
 
-  // Photon Geocoder via Leaflet Control Geocoder
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+  });
+
+  const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '© Esri Imagery'
+  });
+
+  // Custom inline basemap radio selector
+  const basemapDiv = L.DomUtil.create('div', 'basemap-control');
+  basemapDiv.innerHTML = `
+    <strong>Basemap:</strong><br/>
+    <label><input type="radio" name="basemap" value="topo" checked> Topo</label>
+    <label><input type="radio" name="basemap" value="osm"> Streets</label>
+    <label><input type="radio" name="basemap" value="sat"> Satellite</label>
+  `;
+  L.DomEvent.disableClickPropagation(basemapDiv); // let map interactions work
+  map.getContainer().appendChild(basemapDiv);
+
+  // Handle basemap switching
+  document.querySelectorAll('input[name="basemap"]').forEach(input => {
+    input.addEventListener('change', function() {
+      map.removeLayer(esriTopo);
+      map.removeLayer(osm);
+      map.removeLayer(satellite);
+      if (this.value === 'topo') esriTopo.addTo(map);
+      else if (this.value === 'osm') osm.addTo(map);
+      else if (this.value === 'sat') satellite.addTo(map);
+    });
+  });
+
+  // Photon Geocoder
   L.Control.geocoder({
     defaultMarkGeocode: true,
     geocoder: new L.Control.Geocoder.Photon({
       params: {
-        bbox: [-121.4, 35.5, -115.5, 39.5]
+        bbox: [-121.1, 35.5, -115.5, 39] // Limit to 7 County Bounding Box
       }
     }),
     placeholder: 'Type address here…',
-    collapsed: false // keep it open by default
-}).addTo(map);
+    collapsed: false
+  }).addTo(map);
 
-
-  // Legend
+  // Legend control
   const legend = L.control({ position: 'bottomleft' });
-  legend.onAdd = function () {
+  legend.onAdd = () => {
     const div = L.DomUtil.create('div', 'legend');
-    div.innerHTML += '<strong>Status</strong><br>';
-    div.innerHTML += '<i style="background: #E60000"></i><span>Divested</span><br>';
-    div.innerHTML += '<i style="background: #267300"></i><span>Not Divested</span>';
+    div.innerHTML = '<strong>Status</strong><br>';
+    div.innerHTML += '<i style="background:#E60000"></i><span>Divested</span><br>';
+    div.innerHTML += '<i style="background:#267300"></i><span>Not Divested</span>';
     return div;
   };
   legend.addTo(map);
 
-  // Divested layer group
+  // Load and style GeoJSON
   const divestedLayerGroup = L.layerGroup().addTo(map);
-
-  // Load GeoJSON
   fetch('data/divested_7_counties.json')
     .then(res => res.json())
     .then(data => {
-      const divestedLayer = L.geoJSON(data, {
-        style: function (feature) {
-          return {
-            color: feature.properties.divested === 1 ? '#E60000' : '#267300',
-            fillColor: feature.properties.divested === 1 ? '#E60000' : '#267300',
-            fillOpacity: 0.35,
-            weight: 1
-          };
-        },
-        onEachFeature: function (feature, layer) {
-          const isDivested = feature.properties.divested === 1;
-          const popupText = isDivested ? "Divested" : "Not Divested";
-          layer.bindPopup(`<b>${popupText}</b>`);
+      const layer = L.geoJSON(data, {
+        style: f => ({
+          color: f.properties.divested === 1 ? '#E60000' : '#267300',
+          fillColor: f.properties.divested === 1 ? '#E60000' : '#267300',
+          fillOpacity: 0.35,
+          weight: 1
+        }),
+        onEachFeature: (feature, layer) => {
+          const p = feature.properties;
+          const popup = `<b>${p.divested === 1 ? 'Divested' : 'Not Divested'}</b>`;
+          layer.bindPopup(popup);
         }
       });
-      divestedLayerGroup.addLayer(divestedLayer);
+      divestedLayerGroup.addLayer(layer);
     });
 
-  // Toggle control
-  const checkbox = L.control({ position: 'topright' });
-  checkbox.onAdd = function () {
-    const div = L.DomUtil.create('div');
-    div.innerHTML = `
-      <label style="background: white; padding: 6px; border-radius: 4px;">
-        <input type="checkbox" id="toggleDivested" checked /> Show Divested Layer
-      </label>`;
-    return div;
-  };
-  checkbox.addTo(map);
+  // Toggle checkbox (top right)
+  const toggleDiv = L.DomUtil.create('div', 'topright-control');
+  toggleDiv.innerHTML = `
+    <label>
+      <input type="checkbox" id="toggleDivested" checked /> Show Divested Layer
+    </label>`;
+  map.getContainer().appendChild(toggleDiv);
 
-  document.addEventListener('change', function (e) {
-    if (e.target && e.target.id === 'toggleDivested') {
-      if (e.target.checked) {
-        map.addLayer(divestedLayerGroup);
-      } else {
-        map.removeLayer(divestedLayerGroup);
-      }
+  // Toggle layer on/off
+  document.addEventListener('change', e => {
+    if (e.target?.id === 'toggleDivested') {
+      e.target.checked ? map.addLayer(divestedLayerGroup) : map.removeLayer(divestedLayerGroup);
     }
   });
 </script>
-
 </body>
 </html>
