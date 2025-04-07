@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Divested Community Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Leaflet Control Geocoder CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
+    #map {
+      height: 100vh;
+      width: 100%;
+    }
+
+    .legend {
+      background: white;
+      padding: 14px;
+      line-height: 24px;
+      color: #333;
+      position: absolute;
+      bottom: 30px;
+      left: 10px;
+      z-index: 1000;
+      font-size: 16px;
+      font-weight: 500;
+      border-radius: 6px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.2);
+      width: 160px;
+    }
+    .legend i {
+      width: 20px;
+      height: 20px;
+      float: left;
+      margin-right: 10px;
+      opacity: 0.9;
+      border-radius: 3px;
+    }
+    .legend span {
+      display: inline-block;
+      vertical-align: top;
+      margin-top: 2px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Leaflet Control Geocoder JS -->
+<script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
+<script>
+  // Initialize Leaflet map
+  const map = L.map('map').setView([37.3, -118.3], 9);
+
+  // ESRI topo basemap
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, USGS, NOAA',
+    maxZoom: 19
+  }).addTo(map);
+
+  // Photon Geocoder via Leaflet Control Geocoder
+  L.Control.geocoder({
+    defaultMarkGeocode: true,
+    geocoder: new L.Control.Geocoder.Photon({
+      params: {
+        bbox: [-121.4, 35.5, -115.5, 39.5]
+      }
+    }),
+    placeholder: 'Type address here…',
+    collapsed: false // keep it open by default
+}).addTo(map);
+
+
+  // Legend
+  const legend = L.control({ position: 'bottomleft' });
+  legend.onAdd = function () {
+    const div = L.DomUtil.create('div', 'legend');
+    div.innerHTML += '<strong>Status</strong><br>';
+    div.innerHTML += '<i style="background: #E60000"></i><span>Divested</span><br>';
+    div.innerHTML += '<i style="background: #267300"></i><span>Not Divested</span>';
+    return div;
+  };
+  legend.addTo(map);
+
+  // Divested layer group
+  const divestedLayerGroup = L.layerGroup().addTo(map);
+
+  // Load GeoJSON
+  fetch('data/divested_7_counties.json')
+    .then(res => res.json())
+    .then(data => {
+      const divestedLayer = L.geoJSON(data, {
+        style: function (feature) {
+          return {
+            color: feature.properties.divested === 1 ? '#E60000' : '#267300',
+            fillColor: feature.properties.divested === 1 ? '#E60000' : '#267300',
+            fillOpacity: 0.35,
+            weight: 1
+          };
+        },
+        onEachFeature: function (feature, layer) {
+          const isDivested = feature.properties.divested === 1;
+          const popupText = isDivested ? "Divested" : "Not Divested";
+          layer.bindPopup(`<b>${popupText}</b>`);
+        }
+      });
+      divestedLayerGroup.addLayer(divestedLayer);
+    });
+
+  // Toggle control
+  const checkbox = L.control({ position: 'topright' });
+  checkbox.onAdd = function () {
+    const div = L.DomUtil.create('div');
+    div.innerHTML = `
+      <label style="background: white; padding: 6px; border-radius: 4px;">
+        <input type="checkbox" id="toggleDivested" checked /> Show Divested Layer
+      </label>`;
+    return div;
+  };
+  checkbox.addTo(map);
+
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.id === 'toggleDivested') {
+      if (e.target.checked) {
+        map.addLayer(divestedLayerGroup);
+      } else {
+        map.removeLayer(divestedLayerGroup);
+      }
+    }
+  });
+</script>
+
+</body>
+</html>
